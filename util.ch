@@ -5,7 +5,8 @@
       printf("Error at %s:%d:Error:%d\n",__FILE__,__LINE__,x); \
       exit(EXIT_FAILURE);}} while(0)
 
-#define BEGIN_SINGLE_THREAD __syncthreads(); { /* TODO add id check for one thread per warp,
+#define BEGIN_SINGLE_THREAD __syncthreads(); if (threadIdx.x == 0) { 
+                                         /* TODO add id check for one thread per warp,
                                             because GVM will use one thread per warp as
                                             I understand */
 
@@ -17,7 +18,7 @@
 #define CPU_SPINLOCK_UNLOCK(x) while (!__sync_bool_compare_and_swap(x, true, false)) {;}
 
 #define GPU_SPINLOCK_LOCK(x) while (!atomicCAS(x, false, true)) {;}
-#define GPU_SPINLOCK_UNLOCK(x) while (atomicCAS(x, true, false)) {;}
+#define GPU_SPINLOCK_UNLOCK(x) while (atomicExch(x, false)) {;}
 
 
 #endif
