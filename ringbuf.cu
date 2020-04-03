@@ -15,7 +15,11 @@ ringbuf_t * init_ringbuf() {
   CUDA_CALL(cudaGetDevice(&dev_id));
   // TODO required higher cuda version
   //CUDA_CALL(cudaMemAdvise(ringbuf, sizeof(ringbuf_t), cudaMemAdviseSetAccessedBy, dev_id));
-  memset(ringbuf, 0, sizeof(ringbuf_t));
+  CUDA_CALL(cudaMemset(ringbuf, 0, sizeof(ringbuf_t)));
+
+  ringbuf->cpu_mutex = (cpu_mutex_t *) malloc(sizeof(gpu_mutex_t));
+  CUDA_CALL(cudaMalloc(&ringbuf->gpu_mutex, sizeof(gpu_mutex_t)));
+  CUDA_CALL(cudaMemset(ringbuf->gpu_mutex, 0, sizeof(gpu_mutex_t)));
 
   return ringbuf;
 }
@@ -30,7 +34,7 @@ __host__
 bool cpu_dequeue(ringbuf_t * ringbuf, request_t * ret_request) {
   bool success = true;
 
-  CPU_SPINLOCK_LOCK(&ringbuf->cpu_spin_lock);
+  CPU_SPINLOCK_LOCK(ringbuf->cpu_mutex);
   unsigned int read_index = ringbuf->read_index;
   if (read_index == ringbuf->write_index)
     return false;
@@ -39,7 +43,7 @@ bool cpu_dequeue(ringbuf_t * ringbuf, request_t * ret_request) {
     ringbuf->read_index = 0;
     read_index = 0;
   } // HANDLE wrap around at the end
-  CPU_SPINLOCK_UNLOCK(&ringbuf->cpu_spin_lock);
+  CPU_SPINLOCK_UNLOCK(ringbuf->cpu_mutex);
 
   request_t * cur_request = &(ringbuf->requests[ringbuf->read_index]);
  
@@ -59,32 +63,33 @@ __device__
 bool gpu_enqueue(ringbuf_t * ringbuf, request_t * new_request) {
   BEGIN_SINGLE_THREAD;
 
-  GPU_SPINLOCK_LOCK(&ringbuf->gpu_spin_lock);
-  unsigned int write_index = ringbuf->write_index;
+  GPU_SPINLOCK_LOCK(ringbuf->gpu_mutex);
+  //unsigned int write_index = ringbuf->write_index;
 
-  /* wrap index around */
-  if (write_index >= (RINGBUF_SIZE - 1)) {
-    ringbuf->write_index = 0;
-    write_index = 0;
-  }
+  ///* wrap index around */
+  //if (write_index >= (RINGBUF_SIZE - 1)) {
+  //  ringbuf->write_index = 0;
+  //  write_index = 0;
+  //}
 
-  /* buffer is full */
-  if (write_index == ringbuf->read_index && !(write_index == 0 && ringbuf->read_index == 0)) {
-    return false; // TODO come up with more graceful error
+  ///* buffer is full */
+  //if (write_index == ringbuf->read_index && !(write_index == 0 && ringbuf->read_index == 0)) {
+  //  return false; // TODO come up with more graceful error
 
-  } else { /* take write slot */
-    ringbuf->write_index++;
-  }
-  
-  GPU_SPINLOCK_UNLOCK(&ringbuf->gpu_spin_lock);
-
-  printf("thread id:%d index:%d:%d\n", blockIdx.x, write_index, ringbuf->write_index);
-  ringbuf->requests[write_index] = *new_request;
+  //} else { /* take write slot */
+  //  ringbuf->write_index++;
+  //}
+  ringbuf->tmp_counter++;
+  printf("block id:%d counter:%d\n", blockIdx.x,ringbuf-> counter);
   
   __threadfence_system();
-  ringbuf->requests[write_index].ready_to_read = true;
+  GPU_SPINLOCK_UNLOCK(ringbuf->gpu_mutex);
 
-  __threadfence_system();
+  //ringbuf->requests[write_index] = *new_request;
+  
+  //ringbuf->requests[write_index].ready_to_read = true;
+
+  //__threadfence_system();
   END_SINGLE_THREAD;
   
   return true;

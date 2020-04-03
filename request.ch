@@ -2,7 +2,8 @@
 #define REQUEST_CH
 
 typedef enum { // TODO might have better naming scheme
-  read
+  read,
+  test
 } request_type_t;
 
 typedef struct request_t {
