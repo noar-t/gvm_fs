@@ -10,7 +10,7 @@ typedef struct ringbuf_t {
   cpu_mutex_t * cpu_mutex;
   gpu_mutex_t * gpu_mutex;
 
-  unsigned int tmp_counter;
+  volatile unsigned int tmp_counter;
   volatile unsigned int write_index;
   volatile unsigned int read_index;
   request_t requests[RINGBUF_SIZE]; // TODO replace with special request datatype

@@ -62,34 +62,52 @@ bool cpu_dequeue(ringbuf_t * ringbuf, request_t * ret_request) {
 __device__
 bool gpu_enqueue(ringbuf_t * ringbuf, request_t * new_request) {
   BEGIN_SINGLE_THREAD;
+  GPU_SPINLOCK_LOCK(&ringbuf->gpu_mutex);
 
-  GPU_SPINLOCK_LOCK(ringbuf->gpu_mutex);
   //unsigned int write_index = ringbuf->write_index;
+  bool wait = true;
+  //while (wait) {
+  //  unsigned local_tmp = ringbuf->tmp_counter;
 
-  ///* wrap index around */
-  //if (write_index >= (RINGBUF_SIZE - 1)) {
-  //  ringbuf->write_index = 0;
-  //  write_index = 0;
-  //}
+  //  if (local_tmp >= RINGBUF_SIZE) {
+  //    unsigned old = atomicCAS(&ringbuf->tmp_counter, local_tmp, 0);
+  //    if (old != 0)
+  //      continue; /* If atomic failed retry */
 
-  ///* buffer is full */
-  //if (write_index == ringbuf->read_index && !(write_index == 0 && ringbuf->read_index == 0)) {
-  //  return false; // TODO come up with more graceful error
+  //  } else {
+  //    unsigned index = atomicAdd(&ringbuf->tmp_counter, 1);
+  //    if (index >= RINGBUF_SIZE) {
+  //      continue; /* Bad index value, try again */
+  //    }
+  //  }
 
-  //} else { /* take write slot */
-  //  ringbuf->write_index++;
-  //}
-  ringbuf->tmp_counter++;
-  printf("block id:%d counter:%d\n", blockIdx.x,ringbuf-> counter);
-  
+  //  ///* wrap index around */
+  //  //if (write_index >= (RINGBUF_SIZE - 1)) {
+  //  //  ringbuf->write_index = 0;
+  //  //  write_index = 0;
+  //  //}
+
+  //  ///* buffer is full */
+  //  //if (write_index == ringbuf->read_index && !(write_index == 0 && ringbuf->read_index == 0)) {
+  //  //  return false; // TODO come up with more graceful error
+
+  //  //} else { /* take write slot */
+  //  //  ringbuf->write_index++;
+  //  //}
+  //  
   __threadfence_system();
-  GPU_SPINLOCK_UNLOCK(ringbuf->gpu_mutex);
+  ringbuf->tmp_counter++;
+  printf("block id:%d counter:%d\n", blockIdx.x, ringbuf->tmp_counter);
+  //  __threadfence();
+  __threadfence_system();
 
-  //ringbuf->requests[write_index] = *new_request;
-  
-  //ringbuf->requests[write_index].ready_to_read = true;
+  //  //ringbuf->requests[write_index] = *new_request;
+  //  
+  //  //ringbuf->requests[write_index].ready_to_read = true;
 
-  //__threadfence_system();
+  //  //__threadfence_system();
+  //}
+  GPU_SPINLOCK_UNLOCK(&ringbuf->gpu_mutex);
   END_SINGLE_THREAD;
   
   return true;

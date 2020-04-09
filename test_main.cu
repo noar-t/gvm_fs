@@ -15,6 +15,9 @@ int main() {
   ringbuf_t * ringbuf = init_ringbuf();
 
   fill_queue<<<RINGBUF_SIZE, 32>>>(ringbuf);
+ // do {
+    printf("counter %d\n", ringbuf->tmp_counter);
+//  } while (ringbuf->tmp_counter < 100);
 
   CUDA_CALL(cudaDeviceSynchronize());
   __sync_synchronize();
