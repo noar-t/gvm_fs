@@ -5,6 +5,10 @@
       printf("Error at %s:%d:Error:%d\n",__FILE__,__LINE__,x); \
       exit(EXIT_FAILURE);}} while(0)
 
+#define PRINT_ERR(x) do { \
+      printf("Error at %s:%d:Error:%s\n",__FILE__,__LINE__,x); \
+      exit(EXIT_FAILURE);} while(0)
+
 #define BEGIN_SINGLE_THREAD __syncthreads(); if (threadIdx.x == 0) { 
                                          /* TODO add id check for one thread per warp,
                                             because GVM will use one thread per warp as

@@ -9,9 +9,14 @@
 #define RINGBUF_SIZE 100
 
 typedef struct ringbuf_t {
+  /* Synchronization Variables */
   pthread_mutex_t * cpu_mutex;
   gpu_mutex_t * gpu_mutex;
 
+  /* Request Handling Thread */
+  pthread_t request_handler;
+
+  /* Request Buffer Data */
   volatile unsigned int tmp_counter;
   volatile unsigned int write_index;
   volatile unsigned int read_index;

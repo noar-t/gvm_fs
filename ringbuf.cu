@@ -6,6 +6,7 @@
 #include "util.ch"
 
 // TODO add fd array for each process
+void * request_handler_thread_func(void *);
 
 __host__
 ringbuf_t * init_ringbuf() {
@@ -22,14 +23,25 @@ ringbuf_t * init_ringbuf() {
   CUDA_CALL(cudaMalloc(&ringbuf->gpu_mutex, sizeof(gpu_mutex_t)));
   CUDA_CALL(cudaMemset(ringbuf->gpu_mutex, 0, sizeof(gpu_mutex_t)));
 
+  if (pthread_create(&ringbuf->request_handler,
+                     NULL, request_handler_thread_func, NULL) != 0)
+    PRINT_ERR("pthread_create failed");
+
   return ringbuf;
 }
 
 __host__
 void free_ringbuf(ringbuf_t * ringbuf) {
+  free(ringbuf->cpu_mutex);
   CUDA_CALL(cudaFree(ringbuf));
 }
 
+
+__host__
+void * request_handler_thread_func(void *) {
+  printf("REPLACE ME WITH THREAD LOGIC\n");
+  pthread_exit(NULL);
+}
 
 __host__
 bool cpu_dequeue(ringbuf_t * ringbuf, request_t * ret_request) {
