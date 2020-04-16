@@ -6,6 +6,7 @@
 __global__
 void fill_queue(ringbuf_t * ringbuf) {
   request_t request = { .request_type = OPEN_REQUEST, .host_fd = blockIdx.x};
+  //if 
   while (!gpu_enqueue(ringbuf, &request)) {;}
 }
 

@@ -16,9 +16,6 @@ typedef struct ringbuf_t {
   pthread_t request_handler;
 
   /* Request Buffer Data */
-  //volatile unsigned int tmp_counter;
-  //volatile unsigned int write_index;
-  //volatile unsigned int read_index;
   request_t requests[RINGBUF_SIZE]; /* XXX struct elements will be volatile */
   response_t responses[RINGBUF_SIZE];
 } ringbuf_t;

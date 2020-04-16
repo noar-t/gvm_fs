@@ -84,7 +84,8 @@ void handle_request(ringbuf_t * ringbuf, int index) {
   char * file_data;
   bool success = false;
   int fd = 0;
-  //memset(cur_request, 0, sizeof(request_t));
+
+  /* Handle CPU side of request */
   switch (cur_request->request_type) {
     case OPEN_REQUEST:
       file_data = handle_gpu_file_open(cur_request->file_name, 
@@ -103,15 +104,19 @@ void handle_request(ringbuf_t * ringbuf, int index) {
       break;
   }
 
-  response_t * response = &(ringbuf->responses[index]);
 
-  response->host_fd     = fd;
-  response->permissions = RWX_; // TODO fix
-  response->file_data   = file_data;
+  /* Fill out request */
 
-  // TODO clear out response
+  ringbuf->responses[index].host_fd     = fd;
+  //ringbuf->responses[index].file_size   = file_size; TODO file size
+  ringbuf->responses[index].permissions = RWX_; // TODO fix
+  ringbuf->responses[index].file_data   = file_data;
+
+  /* Clear out request once it is filled */
+  memset(&(ringbuf->requests[index]), 0, sizeof(request_t));
+
   __sync_synchronize();
-  response->ready_to_read = 1;
+  ringbuf->responses[index].ready_to_read = true;
   __sync_synchronize();
 }
 
@@ -127,12 +132,17 @@ bool gpu_enqueue(ringbuf_t * ringbuf, request_t * new_request) {
   GPU_SPINLOCK_LOCK(ringbuf->gpu_mutex);
 
   ringbuf->requests[blockIdx.x].request_type = new_request->request_type;
-  ringbuf->requests[blockIdx.x].file_name    = new_request->file_name;
+  //ringbuf->requests[blockIdx.x].file_name    = new_request->file_name; TODO fix
   ringbuf->requests[blockIdx.x].permissions  = new_request->permissions;
   ringbuf->requests[blockIdx.x].host_fd      = new_request->host_fd;
   ringbuf->requests[blockIdx.x].new_size     = new_request->new_size;
 
-  // TODO clear out request slot
+  // TODO clear out response slot
+  ringbuf->responses[blockIdx.x].ready_to_read = false;
+  ringbuf->responses[blockIdx.x].host_fd       = 0;
+  ringbuf->responses[blockIdx.x].file_size     = 0;
+  ringbuf->responses[blockIdx.x].permissions   = RWX_; // TODO fix
+  ringbuf->responses[blockIdx.x].file_data     = NULL;
 
   __threadfence_system();
   /* Enable read flag */
