@@ -5,9 +5,15 @@
 #include "ringbuf.ch"
 #include "util.ch"
 
-// TODO add fd array for each process
-void * request_handler_thread_func(void *);
+#define QUEUE_EMPTY -1
 
+static bool run_host_thread = true;
+
+__host__ void * host_thread_func(void * void_ringbuf);
+__host__ int poll_queue(ringbuf_t * ringbuf);
+__host__ void handle_request(ringbuf_t * ringbuf, int index);
+
+/* Init all ringbuf memory and create the request handler thread */
 __host__
 ringbuf_t * init_ringbuf() {
   ringbuf_t * ringbuf = NULL;
@@ -19,71 +25,116 @@ ringbuf_t * init_ringbuf() {
                           cudaMemAdviseSetAccessedBy, dev_id));
   CUDA_CALL(cudaMemset(ringbuf, 0, sizeof(ringbuf_t)));
 
-  ringbuf->cpu_mutex = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+  //ringbuf->cpu_mutex = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
   CUDA_CALL(cudaMalloc(&ringbuf->gpu_mutex, sizeof(gpu_mutex_t)));
   CUDA_CALL(cudaMemset(ringbuf->gpu_mutex, 0, sizeof(gpu_mutex_t)));
 
   if (pthread_create(&ringbuf->request_handler,
-                     NULL, request_handler_thread_func, NULL) != 0)
+                     NULL, host_thread_func, ringbuf) != 0)
     PRINT_ERR("pthread_create failed");
 
   return ringbuf;
 }
 
+/* Free all/join resources associated with the ringbuf */
 __host__
 void free_ringbuf(ringbuf_t * ringbuf) {
-  free(ringbuf->cpu_mutex);
+  run_host_thread = false;
+  pthread_join(ringbuf->request_handler, NULL);
+
+  //free(ringbuf->cpu_mutex);
+  CUDA_CALL(cudaFree(ringbuf->gpu_mutex));
   CUDA_CALL(cudaFree(ringbuf));
 }
 
 
 __host__
-void * request_handler_thread_func(void *) {
+void * host_thread_func(void * void_ringbuf) {
+  ringbuf_t * ringbuf = (ringbuf_t *) void_ringbuf;
+  // TODO validate argument passed correctly
   printf("REPLACE ME WITH THREAD LOGIC\n");
+
+  while (run_host_thread) {
+    printf("LOOP\n");
+    int queue_index = poll_queue(ringbuf);
+    if (queue_index != QUEUE_EMPTY) {
+      printf("FOUND ONE %d\n", queue_index);
+     // handle_request(ringbuf, queue_index);
+    }
+  }
+
   pthread_exit(NULL);
 }
 
 __host__
-bool cpu_dequeue(ringbuf_t * ringbuf, request_t * ret_request) {
-  bool success = true;
-
-  //CPU_SPINLOCK_LOCK(ringbuf->cpu_mutex);
-  unsigned int read_index = ringbuf->read_index;
-  if (read_index == ringbuf->write_index)
-    return false;
-
-  if (read_index >= (RINGBUF_SIZE-1)) {
-    ringbuf->read_index = 0;
-    read_index = 0;
-  } // HANDLE wrap around at the end
-  //CPU_SPINLOCK_UNLOCK(ringbuf->cpu_mutex);
-
-  request_t * cur_request = NULL;//&(ringbuf->requests[ringbuf->read_index]);
- 
-  while (!cur_request->ready_to_read) {
-    *ret_request = *cur_request;
-    memset(cur_request, 0, sizeof(request_t));
+int poll_queue(ringbuf_t * ringbuf) {
+  for (int i = 0; i < RINGBUF_SIZE; i++) {
+    if (ringbuf->requests[i].ready_to_read) {
+      return i;
+    }
   }
 
-  __sync_synchronize();
-  return success;
+  return QUEUE_EMPTY;
 }
 
-/* Get a valid write_index
-   write into the index
-   */
+__host__
+void handle_request(ringbuf_t * ringbuf, int index) {
+  request_t * cur_request = &(ringbuf->requests[index]);
+
+  char * file_data;
+  bool success = false;
+  int fd = 0;
+  //memset(cur_request, 0, sizeof(request_t));
+  switch (cur_request->request_type) {
+    case OPEN_REQUEST:
+      file_data = handle_gpu_file_open(cur_request->file_name, 
+                                         cur_request->permissions,
+                                         &fd);
+      break;
+    case CLOSE_REQUEST:
+      success = handle_gpu_file_close(cur_request->host_fd);
+      break;
+    case GROW_REQUEST:
+      file_data = handle_gpu_file_grow(cur_request->host_fd,
+                                         cur_request->new_size);
+      break;
+    default:
+      PRINT_ERR("Bad request type\n");
+      break;
+  }
+
+  response_t * response = &(ringbuf->responses[index]);
+
+  response->host_fd     = fd;
+  response->permissions = RWX_; // TODO fix
+  response->file_data   = file_data;
+
+  // TODO clear out response
+  __sync_synchronize();
+  response->ready_to_read = 1;
+  __sync_synchronize();
+}
+
+/* Write a request into the ringbuf,
+   XXX currently not a ringbuf, just a array
+   big enough for each Java thread to have its
+   own unique entry into the array. Can be modified
+   later to be circular, but it has to be polled
+   either way so doesn't seem more efficient. */
 __device__
 bool gpu_enqueue(ringbuf_t * ringbuf, request_t * new_request) {
   BEGIN_SINGLE_THREAD;
   GPU_SPINLOCK_LOCK(ringbuf->gpu_mutex);
 
-  //int write_index = 0;
-
   ringbuf->requests[blockIdx.x].request_type = new_request->request_type;
-  ringbuf->requests[blockIdx.x].placeholder = new_request->placeholder;
+  ringbuf->requests[blockIdx.x].file_name    = new_request->file_name;
+  ringbuf->requests[blockIdx.x].permissions  = new_request->permissions;
+  ringbuf->requests[blockIdx.x].host_fd      = new_request->host_fd;
+  ringbuf->requests[blockIdx.x].new_size     = new_request->new_size;
+
+  // TODO clear out request slot
 
   __threadfence_system();
-
   /* Enable read flag */
   ringbuf->requests[blockIdx.x].ready_to_read = true;
   __threadfence_system();

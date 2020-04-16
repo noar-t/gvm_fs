@@ -16,7 +16,6 @@
 
 #define END_SINGLE_THREAD } __syncthreads(); 
 
-typedef bool cpu_mutex_t;
 typedef unsigned int gpu_mutex_t;
 
 /* locked is 1; free is 0 */
