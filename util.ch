@@ -23,5 +23,7 @@ typedef unsigned int gpu_mutex_t;
 #define GPU_SPINLOCK_LOCK(x) while (atomicExch((gpu_mutex_t *) x, 1) == 1) {;}
 #define GPU_SPINLOCK_UNLOCK(x) do { atomicExch((gpu_mutex_t *) x, 0); } while(0)
 
+__device__ void gpu_str_cpy(char * src, char * dst, size_t max_size);
+
 
 #endif

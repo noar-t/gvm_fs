@@ -3,25 +3,11 @@
 
 #include <pthread.h>
 
-#include "request.ch"
+#include "types.ch"
 #include "util.ch"
 
-#define RINGBUF_SIZE 100
-
-typedef struct ringbuf_t {
-  /* Synchronization Variables */
-  gpu_mutex_t * gpu_mutex;
-
-  /* Request Handling Thread */
-  pthread_t request_handler;
-
-  /* Request Buffer Data */
-  request_t requests[RINGBUF_SIZE]; /* XXX struct elements will be volatile */
-  response_t responses[RINGBUF_SIZE];
-} ringbuf_t;
-
 __host__ ringbuf_t * init_ringbuf();
-__host__ void free_ringbuf(ringbuf_t * ringbuf);
-__device__ bool gpu_enqueue(ringbuf_t * ringbuf, request_t * new_request);
+__host__ void free_ringbuf();
+__device__ void gpu_enqueue(request_t * new_request, response_t * ret_response);
 
 #endif
