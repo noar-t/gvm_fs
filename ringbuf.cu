@@ -80,6 +80,7 @@ int poll_queue(ringbuf_t * ringbuf) {
 __host__
 void handle_request(ringbuf_t * ringbuf, int index) {
   request_t * cur_request = &(ringbuf->requests[index]);
+  response_t * ret_response = &(ringbuf->responses[index])
 
   char * file_data;
   bool success = false;
@@ -88,16 +89,13 @@ void handle_request(ringbuf_t * ringbuf, int index) {
   /* Handle CPU side of request */
   switch (cur_request->request_type) {
     case OPEN_REQUEST:
-      file_data = handle_gpu_file_open(cur_request->file_name, 
-                                         cur_request->permissions,
-                                         &fd);
+      handle_gpu_file_open(cur_request, ret_response);
       break;
     case CLOSE_REQUEST:
-      success = handle_gpu_file_close(cur_request->host_fd);
+      handle_gpu_file_close(cur_request, ret_response);
       break;
     case GROW_REQUEST:
-      file_data = handle_gpu_file_grow(cur_request->host_fd,
-                                         cur_request->new_size);
+      handle_gpu_file_grow(cur_request, ret_response);
       break;
     default:
       PRINT_ERR("Bad request type\n");

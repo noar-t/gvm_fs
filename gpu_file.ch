@@ -1,19 +1,21 @@
 #ifndef GPU_FILE_CH
 #define GPU_FILE_CH
 
+#include "request.ch"
+
 #define MAX_FILES 128
 
 #define NUM_BLOCKS 100
 
 // TODO file struct with offset, size, read position, etc 
-typedef enum {
-  R_,
-  W_,
-  X_,
-  RW_,
-  RX_,
-  WX_,
-  RWX_,
+typedef enum permissions_t {
+  R___ = 0b100,
+  _W__ = 0b010,
+  __X_ = 0b001,
+  RW__ = 0b110,
+  R_X_ = 0b101,
+  _WX_ = 0b011,
+  RWX_ = 0b111,
 } permissions_t;
 
 /* GPU File Struct */
@@ -33,8 +35,8 @@ __host__ global_file_table_t * init_gpu_file();
 __device__ void gpu_file_open(file_table_t * file_table);
 __device__ void gpu_file_grow(file_table_t * file_table);
 __device__ void gpu_file_close(file_table_t * file_table);
-__host__ char * handle_gpu_file_open(char * file_name, permissions_t permissions, int * host_fd);
-__host__ char * handle_gpu_file_grow(int host_fd, size_t new_size);
-__host__ bool handle_gpu_file_close(int host_fd);
+__host__ void handle_gpu_file_open(request_t * request, response_t * ret_response);
+__host__ void handle_gpu_file_grow(request_t * request, response_t * ret_response);
+__host__ void handle_gpu_file_close(request_t * request, response_t * ret_response);
 
 #endif
