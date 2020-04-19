@@ -3,6 +3,10 @@
 
 #include "util.ch"
 
+#define MAX_FILES 128
+#define NUM_BLOCKS 100
+#define FILE_TABLE_FULL -1
+
 // TODO might be best to split these back out
 
 /***********************
@@ -21,6 +25,7 @@ typedef enum permissions_t {
 
 /* GPU File Struct */
 typedef struct file_t {
+  bool in_use;
   int host_fd;
   size_t current_size;
   
@@ -29,8 +34,12 @@ typedef struct file_t {
   size_t offset;
 } file_t;
 
-typedef file_t ** global_file_table_t;
-typedef file_t * file_table_t;
+typedef struct file_meta_table_t {
+  file_t files[MAX_FILES];
+} file_meta_table_t;
+
+typedef file_meta_table_t * global_file_meta_table_t;
+typedef int gpu_fd;
 
 /**************************
  * Ringbuf Datastructures *
@@ -76,7 +85,7 @@ typedef struct ringbuf_t {
 
   /* Request Buffer Data */
   request_t requests[RINGBUF_SIZE]; /* XXX struct elements will be volatile */
-  response_t responses[RINGBUF_SIZE];
+  volatile response_t responses[RINGBUF_SIZE];
 } ringbuf_t;
 
 #endif

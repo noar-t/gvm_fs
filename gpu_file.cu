@@ -9,19 +9,21 @@
 #include "types.ch"
 #include "util.ch"
 
-__device__ __constant__ global_file_table_t  * global_file_table;
+__device__ __constant__ global_file_meta_table_t  * global_file_meta_table;
 
 /* Allocate the global file table */
 __host__
 void init_gpu_file() {
-  global_file_table_t * dev_ptr;
-  CUDA_CALL(cudaMalloc((void **) &dev_ptr, NUM_BLOCKS * MAX_FILES * sizeof(file_t)));
-  CUDA_CALL(cudaMemcpyToSymbol(global_file_table, &dev_ptr,
-                               sizeof(global_file_table_t *)));
+  global_file_meta_table_t * dev_ptr;
+  CUDA_CALL(cudaMalloc((void **) &dev_ptr, NUM_BLOCKS * sizeof(file_meta_table_t)));
+  CUDA_CALL(cudaMemset(dev_ptr, 0, NUM_BLOCKS * sizeof(file_meta_table_t)));
+  CUDA_CALL(cudaMemcpyToSymbol(global_file_meta_table, &dev_ptr,
+                               sizeof(global_file_meta_table_t *)));
 }
 
 __device__
-void gpu_file_open(char * file_name, permissions_t permissions) {
+gpu_fd gpu_file_open(char * file_name, permissions_t permissions) {
+  // TODO may need to make gpu_file_* into a single thread function
   request_t open_request = {0};
   open_request.request_type = OPEN_REQUEST;
   open_request.permissions  = permissions;
@@ -33,18 +35,37 @@ void gpu_file_open(char * file_name, permissions_t permissions) {
 
   printf("debug placeholder %s\n", response.file_data);
   // TODO do something with file data
+  file_meta_table_t * file_meta_table = (file_meta_table_t *) &(global_file_meta_table[blockIdx.x *MAX_FILES]);
+
+  for (int i = 0; i < MAX_FILES; i++) {
+    if (!file_meta_table->files[i].in_use) {
+      file_meta_table->files[i] = {
+        .in_use = true,
+        .host_fd = response.host_fd,
+        .current_size = (size_t) response.file_size,
+        .permissions = response.permissions,
+        .offset = 0,
+      };
+
+      return i;
+    }
+  }
+
+  return FILE_TABLE_FULL;
 }
 
 __device__
-void gpu_file_grow(void) { ; }
+void gpu_file_grow(void) {
+  ; 
+}
 
 __device__
 void gpu_file_close(void) { ; }
 
 __host__
-void handle_gpu_file_open(request_t * request, response_t * ret_response) {
+void handle_gpu_file_open(volatile request_t * request, volatile response_t * ret_response) {
   permissions_t permissions = request->permissions;
-  char * file_name = request->file_name;
+  char * file_name = (char *) request->file_name;
 
   int oflag = 0;//O_CREAT;
   if (permissions == R___)
@@ -53,9 +74,6 @@ void handle_gpu_file_open(request_t * request, response_t * ret_response) {
     oflag |= O_WRONLY;
   else if (permissions == RW__)
     oflag |= O_RDWR;
-
-  //if (permissions & __X_)
-    //oflag |= O_EXEC; TODO undefined on this system for some reason
 
   int fd = open(file_name, oflag);
   if (fd == -1)
@@ -80,17 +98,16 @@ void handle_gpu_file_open(request_t * request, response_t * ret_response) {
   ret_response->file_size   = file_size;
   ret_response->permissions = permissions;
   ret_response->file_data   = file_mem;
-  printf("file data %x\n", ret_response->file_data);
 }
 
 __host__
-void handle_gpu_file_grow(request_t * request, response_t * ret_response) {
+void handle_gpu_file_grow(volatile request_t * request, volatile response_t * ret_response) {
   // TODO might be best to close the file and flush then grow and reopen
   ;
 }
 
 __host__
-void handle_gpu_file_close(request_t * request, response_t * ret_response) {
+void handle_gpu_file_close(volatile request_t * request, volatile response_t * ret_response) {
   // TODO
   ;
 }
