@@ -21,8 +21,7 @@ void init_gpu_file() {
 }
 
 __device__
-void gpu_file_open(file_table_t * file_table, char * file_name, 
-                   permissions_t permissions) {
+void gpu_file_open(char * file_name, permissions_t permissions) {
   request_t open_request = {0};
   open_request.request_type = OPEN_REQUEST;
   open_request.permissions  = permissions;
@@ -31,26 +30,29 @@ void gpu_file_open(file_table_t * file_table, char * file_name,
   response_t response = {0};
   gpu_enqueue(&open_request, &response);
 
+
+  printf("debug placeholder %s\n", response.file_data);
   // TODO do something with file data
 }
 
 __device__
-void gpu_file_grow(file_table_t * file_table) { ; }
+void gpu_file_grow(void) { ; }
 
 __device__
-void gpu_file_close(file_table_t * file_table) { ; }
+void gpu_file_close(void) { ; }
 
 __host__
 void handle_gpu_file_open(request_t * request, response_t * ret_response) {
   permissions_t permissions = request->permissions;
   char * file_name = request->file_name;
 
-  int oflag = O_CREAT;
-  if (permissions & R___)
+  int oflag = 0;//O_CREAT;
+  if (permissions == R___)
     oflag |= O_RDONLY;
-    
-  if (permissions & _W__)
+  else if (permissions == _W__)
     oflag |= O_WRONLY;
+  else if (permissions == RW__)
+    oflag |= O_RDWR;
 
   //if (permissions & __X_)
     //oflag |= O_EXEC; TODO undefined on this system for some reason
@@ -74,10 +76,11 @@ void handle_gpu_file_open(request_t * request, response_t * ret_response) {
   if (bytes_read != file_size)
     perror("handle_gpu_file_open error reading file\n");
 
-  ret_response->host_fd      = fd;
-  ret_response->file_size    = file_size;
+  ret_response->host_fd     = fd;
+  ret_response->file_size   = file_size;
   ret_response->permissions = permissions;
-  ret_response->file_data    = file_mem;
+  ret_response->file_data   = file_mem;
+  printf("file data %x\n", ret_response->file_data);
 }
 
 __host__

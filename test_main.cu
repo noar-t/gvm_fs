@@ -8,7 +8,7 @@
 __global__
 void fill_queue(void) {
   if (blockIdx.x == 0 && threadIdx.x == 0)
-    gpu_file_open(NULL, "test", RWX_);
+    gpu_file_open("/home/noah/School/gvm_fs/files/sm_test_file.txt", RW__);
 }
 
 

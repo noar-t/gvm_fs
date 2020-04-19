@@ -62,7 +62,7 @@ typedef struct request_t {
 typedef struct response_t {
   volatile bool ready_to_read;
   int host_fd;       /* if open request */
-  size_t file_size;
+  off_t file_size;
   permissions_t permissions;
   char * file_data;
 } response_t;

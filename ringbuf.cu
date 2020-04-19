@@ -60,7 +60,7 @@ void * host_thread_func(void * unused) {
   printf("REPLACE ME WITH THREAD LOGIC\n");
 
   while (run_host_thread) {
-    printf("LOOP\n");
+    //printf("LOOP\n");
     int queue_index = poll_queue();
     if (queue_index != QUEUE_EMPTY) {
       printf("FOUND ONE %d\n", queue_index);
@@ -68,12 +68,11 @@ void * host_thread_func(void * unused) {
       printf("Request: {.type = %d, .file_name = %s, .permissions = %d, .host_fd = %d, .new_size = %u } \n",
              request->request_type, request->file_name, request->permissions,
              request->host_fd, request->new_size);
-      sleep(10);
-      cpu_ringbuf_ref->responses[queue_index].ready_to_read = true;
+      //sleep(10);
       __sync_synchronize();
-      sleep(10);
+      //sleep(10);
+      handle_request(queue_index);
       break;
-     // handle_request(ringbuf, queue_index);
     }
   }
 
@@ -115,7 +114,9 @@ void handle_request(int index) {
 
   /* Clear out request once it is filled */
   memset(&(cpu_ringbuf_ref->requests[index]), 0, sizeof(request_t));
+  printf("resp ptr %x\n", cpu_ringbuf_ref->responses[index].file_data);
 
+  //cpu_ringbuf_ref->responses[index].file_size = (off_t) cpu_ringbuf_ref->responses[index].file_data;
   __sync_synchronize();
   cpu_ringbuf_ref->responses[index].ready_to_read = true;
   __sync_synchronize();
@@ -150,7 +151,7 @@ void gpu_enqueue(request_t * new_request, response_t * ret_response) {
   cur_response->ready_to_read = false;
   cur_response->host_fd       = 0;
   cur_response->file_size     = 0;
-  cur_response->permissions   = RWX_; // TODO fix
+  cur_response->permissions   = RW__; // TODO fix
   cur_response->file_data     = NULL;
 
   __threadfence_system();
@@ -162,11 +163,15 @@ void gpu_enqueue(request_t * new_request, response_t * ret_response) {
     ;/* XXX wait for CPU to respond to request */
   }
   __threadfence_system();
-  printf("response received\n");
+  printf("response received %d:%d:%u:%x\n", cur_response->ready_to_read, 
+      cur_response->host_fd, cur_response->file_size, cur_response->file_data);
+  //printf("response received %d:%d:%s\n", cur_response->ready_to_read, 
+  //    cur_response->host_fd, cur_response->file_data);
   ret_response->host_fd     = cur_response->host_fd;
   ret_response->file_size   = cur_response->file_size;
   ret_response->permissions = cur_response->permissions;
   ret_response->file_data   = cur_response->file_data;
+  __threadfence_system();
 
 
   GPU_SPINLOCK_UNLOCK(gpu_ringbuf_ref->gpu_mutex);
