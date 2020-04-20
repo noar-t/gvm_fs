@@ -177,6 +177,7 @@ void gpu_enqueue(request_t * new_request, response_t * ret_response) {
   ret_response->permissions = cur_response->permissions;
   ret_response->file_data   = cur_response->file_data;
   __threadfence_system();
+  printf("What error\n");
 
 
   GPU_SPINLOCK_UNLOCK(gpu_ringbuf_ref->gpu_mutex);

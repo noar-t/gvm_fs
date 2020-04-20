@@ -17,12 +17,13 @@ void fill_queue(void) {
 int main() {
   printf("MAIN\n");
   init_ringbuf();
+  init_gpu_file();
   printf("DONE init_ringbuf\n");
 
   fill_queue<<<RINGBUF_SIZE, 32>>>();
 
   CUDA_CALL(cudaDeviceSynchronize());
-  sleep(10);
+  //sleep(10);
 
   free_ringbuf();
 }

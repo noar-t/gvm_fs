@@ -28,6 +28,7 @@ typedef struct file_t {
   bool in_use;
   int host_fd;
   size_t current_size;
+  char * data; /* pointer to start of data */
   
   //int local_fd;
   permissions_t permissions;
