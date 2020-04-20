@@ -66,14 +66,11 @@ void * host_thread_func(void * unused) {
     if (queue_index != QUEUE_EMPTY) {
       printf("FOUND ONE %d\n", queue_index);
       request_t * request = &(cpu_ringbuf_ref->requests[queue_index]);
-      printf("Request: {.type = %d, .file_name = %s, .permissions = %d, .host_fd = %d, .new_size = %u } \n",
-             request->request_type, request->file_name, request->permissions,
+      printf("Request: {.type = %d, .file_mem = %p, .file_name = %s, .permissions = %d, .host_fd = %d, .new_size = %u } \n",
+             request->request_type, request->file_mem, request->file_name, request->permissions,
              request->host_fd, request->new_size);
-      //sleep(10);
       __sync_synchronize();
-      //sleep(10);
       handle_request(queue_index);
-      break;
     }
   }
 
@@ -144,7 +141,9 @@ void gpu_enqueue(request_t * new_request, response_t * ret_response) {
   cur_request->request_type = new_request->request_type;
   cur_request->permissions  = new_request->permissions;
   cur_request->host_fd      = new_request->host_fd;
+  cur_request->file_mem     = new_request->file_mem;
   cur_request->new_size     = new_request->new_size;
+  cur_request->current_size = new_request->current_size;
   gpu_str_cpy((char *) new_request->file_name, (char *) cur_request->file_name, MAX_PATH_SIZE);
 
   /* Clear out response such that it can be used for our new request */
@@ -161,15 +160,15 @@ void gpu_enqueue(request_t * new_request, response_t * ret_response) {
   cur_request->ready_to_read = true;
   __threadfence_system();
 
- // while (cur_response->ready_to_read != true) {
- //   ;/* XXX wait for CPU to respond to request */
- // }
-  while (cur_response->file_data == NULL) {;}
+  while (cur_response->ready_to_read != true) {
+    ;/* XXX wait for CPU to respond to request */
+  }
   printf("request made\n");
 
   __threadfence_system();
-  printf("response received %d:%d:%u%"PRIx64":%c\n", cur_response->ready_to_read, 
-      cur_response->host_fd, cur_response->file_size, cur_response->file_data, *cur_response->file_data);
+  printf("response received %d:%d:%u%" PRIx64 "\n", cur_response->ready_to_read, 
+      cur_response->host_fd, cur_response->file_size, cur_response->file_data, cur_response->file_data);
+      //cur_response->host_fd, cur_response->file_size, cur_response->file_data, *cur_response->file_data);
   //printf("response received %d:%d:%s\n", cur_response->ready_to_read, 
   //    cur_response->host_fd, cur_response->file_data);
   ret_response->host_fd     = cur_response->host_fd;

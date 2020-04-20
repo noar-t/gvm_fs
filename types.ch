@@ -28,6 +28,7 @@ typedef struct file_t {
   bool in_use;
   int host_fd;
   size_t current_size;
+  size_t original_size;
   char * data; /* pointer to start of data */
   
   //int local_fd;
@@ -63,10 +64,26 @@ typedef struct request_t {
   request_type_t request_type;
 
   /* Request variables */
-  char file_name[MAX_PATH_SIZE]; /* Needs to be in shared memory (makes char * hard) */
-  permissions_t permissions; /* Unix style permissions (rwx) */
-  int host_fd;               /* Used for growing/closing */
-  size_t new_size;           /*   ^    */
+  union {
+    struct {                         /* Open variables */
+      char file_name[MAX_PATH_SIZE]; /* Needs to be in shared memory (makes char * hard) */
+      permissions_t permissions;     /* Unix style permissions (rwx) */
+    };
+    struct {                         /*** Grow/Close variables ***/
+      int host_fd;                   /* fd on host */
+      char * file_mem;               /* Pointer to currently mapped mem */
+      union {
+        struct {                     /*** Grow ***/
+          size_t new_size;           /* Size desired for grow */
+          size_t current_size;       /* Size of current gpu file */
+        };
+        struct {                     /*** Close ***/
+          size_t actual_size;        /* Total new size for close */
+          size_t original_size;      /* Size file was at initial open */
+        };
+      };
+    };
+  };
 } request_t;
 
 typedef struct response_t {

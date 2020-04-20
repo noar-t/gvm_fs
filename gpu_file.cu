@@ -9,6 +9,9 @@
 #include "types.ch"
 #include "util.ch"
 
+// XXX REMOVE
+#include <inttypes.h>
+
 __device__ __constant__ global_file_meta_table_t  * global_file_meta_table;
 
 /* Allocate the global file table */
@@ -54,12 +57,13 @@ gpu_fd gpu_file_open(char * file_name, permissions_t permissions) {
   for (int i = 0; i < MAX_FILES; i++) {
     if (!file_meta_table->files[i].in_use) {
       file_meta_table->files[i] = {
-        .in_use = true,
-        .host_fd = response.host_fd,
-        .current_size = (size_t) response.file_size,
-        .data = response.file_data,
-        .permissions = response.permissions,
-        .offset = 0,
+        .in_use        = true,
+        .host_fd       = response.host_fd,
+        .current_size  = (size_t) response.file_size,
+        .original_size = (size_t) response.file_size,
+        .data          = response.file_data,
+        .permissions   = response.permissions,
+        .offset        = 0,
       };
 
       return i;
@@ -115,16 +119,37 @@ off_t gpu_file_seek(gpu_fd fd, off_t offset, int whence) {
 }
 
 __device__
-void gpu_file_grow(void) {
-  ; 
+void gpu_file_grow(gpu_fd fd, size_t size) {
+  file_t * cur_file = get_file_from_gpu_fd(fd);
+  assert(size > cur_file->current_size);
+  request_t grow_request     = {0};
+  grow_request.request_type  = GROW_REQUEST;
+  grow_request.file_mem      = cur_file->data;
+  grow_request.new_size      = size;
+  grow_request.current_size  = cur_file->current_size;
+
+  printf("debug placeholder %p:%d:%s:%s\n", cur_file->data, __LINE__, __FILE__, __func__);
+  printf("debug placeholder %p:%d:%s:%s\n", grow_request.file_mem, __LINE__, __FILE__, __func__);
+
+  response_t response = {0};
+  gpu_enqueue(&grow_request, &response);
+
+  cur_file->data         = response.file_data;
+  cur_file->current_size = response.file_size;
+  assert(response.file_size == size);
 }
 
 __device__
 void gpu_file_close(gpu_fd fd) { 
   file_t * cur_file = get_file_from_gpu_fd(fd);
-  request_t close_request   = {0};
-  close_request.request_type = CLOSE_REQUEST;
-  close_request.host_fd      = cur_file->host_fd;
+  request_t close_request     = {0};
+  close_request.request_type  = CLOSE_REQUEST;
+  close_request.host_fd       = cur_file->host_fd;
+  close_request.file_mem      = cur_file->data;
+  close_request.actual_size   = cur_file->current_size;
+  close_request.original_size = cur_file->original_size;
+  printf("debug placeholder %p:%d:%s\n", cur_file->data, __LINE__, __FILE__);
+  printf("debug placeholder %p:%d:%s\n", close_request.file_mem, __LINE__, __FILE__);
 
   response_t response = {0};
   gpu_enqueue(&close_request, &response);
@@ -177,17 +202,57 @@ void handle_gpu_file_open(volatile request_t * request, volatile response_t * re
 
 __host__
 void handle_gpu_file_grow(volatile request_t * request, volatile response_t * ret_response) {
-  // TODO might be best to close the file and flush then grow and reopen
-  ;
+  // XXX could also save ftruncate until the file is closed but this is
+  // what we got now
+  // TODO maybe round up allocations to be page size multiple
+  char * file_mem      = request->file_mem;
+  size_t new_size      = request->new_size;
+  size_t current_size  = request->current_size;
+
+  if (new_size <= current_size) {
+    printf("Error grow size bad %d:%d\n", new_size, current_size);
+  }
+
+
+  char * new_file_mem = NULL;
+  CUDA_CALL(cudaMallocManaged(&new_file_mem, new_size));
+  memset((new_file_mem + current_size), 0, (new_size - current_size));
+  memcpy(new_file_mem, file_mem, current_size);
+  //CUDA_CALL(cudaFree(file_mem));
+  // TODO find way to reuse/free cuda malloc mem
+
+  ret_response->file_data = new_file_mem;
+  ret_response->file_size = new_size;
 }
 
 __host__
 void handle_gpu_file_close(volatile request_t * request, volatile response_t * ret_response) {
-  // TODO probably easier to use ftruncate to grow the open file
-  int host_fd = request->host_fd;
-  // TODO need ot add fields for actual size
-  // original size
-  // pointer to memory
-  // might want to make request a union of structs
-  ;
+  int host_fd          = request->host_fd;
+  char * file_mem      = request->file_mem;
+  size_t actual_size   = request->actual_size;
+  size_t original_size = request->original_size;
+
+  /* If the file has been appended to the actual file needs to grow */
+  if (actual_size != original_size) {
+    if (actual_size < original_size) {
+      printf("Error close size bad %d:%d\n", actual_size, original_size);
+    }
+
+    int err = ftruncate(host_fd, actual_size);
+    if (err == -1) {
+      perror("Ftruncate failed to grow\n");
+    }
+  }
+
+  printf("CPU File: %s\n", file_mem);
+
+  ssize_t bytes_written = pwrite(host_fd, file_mem, actual_size, 0);
+  if (bytes_written !=  actual_size) {
+    perror("Failed to write file in close\n");
+  }
+
+
+  //CUDA_CALL(cudaFree(file_mem));
+  // XXX since cudaFree is synchonous this call will never return
+  printf("Done handle file close\n");
 }
