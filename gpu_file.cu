@@ -18,10 +18,9 @@ __device__ __constant__ global_file_meta_table_t  * global_file_meta_table;
 __host__
 void init_gpu_file() {
   global_file_meta_table_t * dev_ptr;
-  CUDA_CALL(cudaMalloc((void **) &dev_ptr, NUM_BLOCKS * sizeof(file_meta_table_t)));
-  CUDA_CALL(cudaMemset(dev_ptr, 0, NUM_BLOCKS * sizeof(file_meta_table_t)));
-  CUDA_CALL(cudaMemcpyToSymbol(global_file_meta_table, &dev_ptr,
-                               sizeof(global_file_meta_table_t *)));
+  CUDA_CALL(cudaMalloc((void **) &dev_ptr, NUM_BLOCKS * MAX_FILES * sizeof(file_meta_table_t)));
+  CUDA_CALL(cudaMemset(dev_ptr, 0, NUM_BLOCKS * MAX_FILES * sizeof(file_meta_table_t)));
+  CUDA_CALL(cudaMemcpyToSymbol(global_file_meta_table, &dev_ptr, sizeof(global_file_meta_table_t *)));
 }
 
 __device__
@@ -49,7 +48,7 @@ gpu_fd gpu_file_open(char * file_name, permissions_t permissions) {
   response_t response = {0};
   gpu_enqueue(&open_request, &response);
 
-  printf("debug placeholder %s\n", response.file_data);
+  //printf("debug placeholder %s\n", response.file_data);
   file_meta_table_t * file_meta_table =
         (file_meta_table_t *) &(global_file_meta_table[blockIdx.x * MAX_FILES]);
 
@@ -128,8 +127,8 @@ void gpu_file_grow(gpu_fd fd, size_t size) {
   grow_request.new_size      = size;
   grow_request.current_size  = cur_file->current_size;
 
-  printf("debug placeholder %p:%d:%s:%s\n", cur_file->data, __LINE__, __FILE__, __func__);
-  printf("debug placeholder %p:%d:%s:%s\n", grow_request.file_mem, __LINE__, __FILE__, __func__);
+  //printf("debug placeholder %p:%d:%s:%s\n", cur_file->data, __LINE__, __FILE__, __func__);
+  //printf("debug placeholder %p:%d:%s:%s\n", grow_request.file_mem, __LINE__, __FILE__, __func__);
 
   response_t response = {0};
   gpu_enqueue(&grow_request, &response);
@@ -148,14 +147,14 @@ void gpu_file_close(gpu_fd fd) {
   close_request.file_mem      = cur_file->data;
   close_request.actual_size   = cur_file->current_size;
   close_request.original_size = cur_file->original_size;
-  printf("debug placeholder %p:%d:%s\n", cur_file->data, __LINE__, __FILE__);
-  printf("debug placeholder %p:%d:%s\n", close_request.file_mem, __LINE__, __FILE__);
+  //printf("debug placeholder %p:%d:%s\n", cur_file->data, __LINE__, __FILE__);
+  //printf("debug placeholder %p:%d:%s\n", close_request.file_mem, __LINE__, __FILE__);
 
   response_t response = {0};
   gpu_enqueue(&close_request, &response);
 
 
-  printf("debug placeholder %s\n", response.file_data);
+  //printf("debug placeholder %s\n", response.file_data);
   // TODO if make this multithread may need to single thread this or
   // something because the file table is per block, not per thread
   /* Free up gpu file descriptor */
