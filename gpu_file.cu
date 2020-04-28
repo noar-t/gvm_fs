@@ -18,7 +18,7 @@ __device__ __constant__ global_file_meta_table_t  * global_file_meta_table;
 __host__
 void init_gpu_file() {
   global_file_meta_table_t * dev_ptr;
-  CUDA_CALL(cudaMalloc((void **) &dev_ptr, NUM_BLOCKS * MAX_FILES * sizeof(file_meta_table_t)));
+  CUDA_CALL(cudaMallocManaged((void **) &dev_ptr, NUM_BLOCKS * MAX_FILES * sizeof(file_meta_table_t)));
   CUDA_CALL(cudaMemset(dev_ptr, 0, NUM_BLOCKS * MAX_FILES * sizeof(file_meta_table_t)));
   CUDA_CALL(cudaMemcpyToSymbol(global_file_meta_table, &dev_ptr, sizeof(global_file_meta_table_t *)));
 }
