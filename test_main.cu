@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include "gvm_fs.h"
 #include "gpu_file.ch"
 #include "rpc_queue.ch"
 #include "types.ch"
@@ -21,7 +22,7 @@ void fill_queue(void) {
     //printf("File: %s\n", file_buf);
     ////gpu_file_grow(fd, 32);
     //gpu_file_close(fd);
-    gpu_fd fd = gpu_file_open("/home/noah/School/Thesis/gvm_fs/files/sm_test_file.txt", RW__);
+    gpu_fd fd = gpu_file_open((char *) "/home/noah/School/Thesis/gvm_fs/files/sm_test_file.txt", RW__);
     char * file_buf = NULL;
     gpu_file_read(fd, 16, &file_buf);
     //printf("Filebuf: %c%c%c%c", file_buf[0], file_buf[1], file_buf[2], file_buf[3]);
@@ -31,8 +32,7 @@ void fill_queue(void) {
 
 int main() {
   printf("MAIN\n");
-  init_rpc_queue();
-  init_gpu_file();
+  init_gvm_fs();
   printf("DONE init_rpc_queue\n");
 
   //fill_queue<<<rpc_queue_SIZE, 32>>>();
@@ -42,7 +42,7 @@ int main() {
   //sleep(10);
   printf("Kernel finished\n");
 
-  free_rpc_queue();
+  cleanup_gvm_fs();
 }
 
 

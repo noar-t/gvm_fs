@@ -8,4 +8,7 @@ __host__
 void init_memory_pool(void);
 
 __host__
-void * allocate_memory(size_t amount);
+void * allocate_from_memory_pool(size_t amount);
+
+__host__
+void free_from_memory_pool(void * mem, size_t amount);

@@ -16,9 +16,9 @@ static bool run_host_thread = true;
 __device__ __constant__ rpc_queue_t * gpu_rpc_queue_ref;
 rpc_queue_t * cpu_rpc_queue_ref;
 
-__host__ void * host_thread_func(void * unused);
-__host__ int poll_queue();
-__host__ void handle_request(int index);
+__host__ static void * host_thread_func(void * unused);
+__host__ static int poll_queue();
+__host__ static void handle_request(int index);
 
 /* Init all rpc_queue memory and create the request handler thread */
 __host__
@@ -57,7 +57,7 @@ void free_rpc_queue(void) {
 
 
 __host__
-void * host_thread_func(void * unused) {
+static void * host_thread_func(void * unused) {
   while (run_host_thread) {
     int queue_index = poll_queue();
     if (queue_index != QUEUE_EMPTY) {
@@ -76,7 +76,7 @@ void * host_thread_func(void * unused) {
 }
 
 __host__
-int poll_queue(void) {
+static int poll_queue(void) {
   for (int i = 0; i < RPC_QUEUE_SIZE; i++) {
     if (cpu_rpc_queue_ref->requests[i].ready_to_read) {
       return i;
@@ -87,7 +87,7 @@ int poll_queue(void) {
 }
 
 __host__
-void handle_request(int index) {
+static void handle_request(int index) {
   volatile request_t * cur_request = &(cpu_rpc_queue_ref->requests[index]);
   volatile response_t * ret_response = &(cpu_rpc_queue_ref->responses[index]);
 
@@ -156,10 +156,10 @@ void gpu_enqueue(request_t * new_request, response_t * ret_response) {
   cur_response->file_data     = NULL;
 
   printf("GPU Request (%d): {.type = %d, .file_name = %s, .permissions = %d, .host_fd = %d,"
-         " .file_mem = %p, .new_size = %zu, .current_size = %zu } \n",
+         " .file_mem = %p, .new_size = %d, .current_size = %d } \n",
          blockIdx.x,
          cur_request->request_type, cur_request->file_name, cur_request->permissions,
-         cur_request->host_fd, cur_request->file_mem, cur_request->new_size, cur_request->current_size);
+         cur_request->host_fd, cur_request->file_mem, (int) cur_request->new_size, (int) cur_request->current_size);
 
   __threadfence_system();
   /* Enable read flag */

@@ -5,7 +5,8 @@
 #include <unistd.h>
 
 #include "gpu_file.ch"
-#include "ringbuf.ch"
+#include "memory_pool.ch"
+#include "rpc_queue.ch"
 #include "types.ch"
 #include "util.ch"
 
@@ -18,9 +19,12 @@ __device__ __constant__ global_file_meta_table_t  * global_file_meta_table;
 __host__
 void init_gpu_file() {
   global_file_meta_table_t * dev_ptr;
-  CUDA_CALL(cudaMallocManaged((void **) &dev_ptr, NUM_BLOCKS * MAX_FILES * sizeof(file_meta_table_t)));
-  CUDA_CALL(cudaMemset(dev_ptr, 0, NUM_BLOCKS * MAX_FILES * sizeof(file_meta_table_t)));
-  CUDA_CALL(cudaMemcpyToSymbol(global_file_meta_table, &dev_ptr, sizeof(global_file_meta_table_t *)));
+  size_t table_size = NUM_BLOCKS * MAX_FILES * sizeof(file_meta_table_t);
+  printf("init_gpu_file: size %zu\n", table_size);
+  CUDA_CALL(cudaMallocManaged((void **) &dev_ptr, table_size));
+  CUDA_CALL(cudaMemset(dev_ptr, 0, table_size));
+  CUDA_CALL(cudaMemcpyToSymbol(global_file_meta_table, &dev_ptr, 
+                               sizeof(global_file_meta_table_t *)));
 }
 
 __device__
@@ -55,7 +59,7 @@ gpu_fd gpu_file_open(char * file_name, permissions_t permissions) {
   /* Fill in slot in file descriptor table */
   for (int i = 0; i < MAX_FILES; i++) {
     if (!file_meta_table->files[i].in_use) {
-      file_meta_table->files[i] = {
+      file_meta_table->files[i] = (file_t) {
         .in_use        = true,
         .host_fd       = response.host_fd,
         .current_size  = (size_t) response.file_size,
@@ -141,7 +145,7 @@ void gpu_file_grow(gpu_fd fd, size_t size) {
 __device__
 void gpu_file_close(gpu_fd fd) { 
   file_t * cur_file = get_file_from_gpu_fd(fd);
-  request_t close_request     = {0};
+  request_t close_request     = (request_t) {0};
   close_request.request_type  = CLOSE_REQUEST;
   close_request.host_fd       = cur_file->host_fd;
   close_request.file_mem      = cur_file->data;
@@ -158,7 +162,7 @@ void gpu_file_close(gpu_fd fd) {
   // TODO if make this multithread may need to single thread this or
   // something because the file table is per block, not per thread
   /* Free up gpu file descriptor */
-  *cur_file = {0};
+  *cur_file = (file_t) {0};
 }
 
 __host__
@@ -186,17 +190,25 @@ void handle_gpu_file_open(volatile request_t * request, volatile response_t * re
   off_t file_size = file_stat.st_size;
   // TODO should be able to create files, but cant currently
   assert(file_size > 0); 
- 
-  char * file_mem = NULL; 
-  CUDA_CALL(cudaMallocManaged(&file_mem, file_size));
-  ssize_t bytes_read = read(fd, file_mem, file_size);
+
+  /* Read data into CPU */ 
+  char * cpu_file_mem = (char *) malloc(file_size);
+  if (cpu_file_mem == NULL) 
+    perror("failure in malloc withink file open\n");
+
+  ssize_t bytes_read = read(fd, cpu_file_mem, file_size);
   if (bytes_read != file_size)
     perror("handle_gpu_file_open error reading file\n");
+
+  fprintf(stderr, "pre cuda malloced %zu\n", file_size);
+  char * gpu_file_mem = (char *) allocate_from_memory_pool(file_size); 
+  assert(gpu_file_mem != NULL);
+  fprintf(stderr, "cuda malloced\n");
 
   ret_response->host_fd     = fd;
   ret_response->file_size   = file_size;
   ret_response->permissions = permissions;
-  ret_response->file_data   = file_mem;
+  ret_response->file_data   = gpu_file_mem;
 }
 
 __host__
@@ -204,21 +216,19 @@ void handle_gpu_file_grow(volatile request_t * request, volatile response_t * re
   // XXX could also save ftruncate until the file is closed but this is
   // what we got now
   // TODO maybe round up allocations to be page size multiple
-  char * file_mem      = request->file_mem;
+  char * old_file_mem  = request->file_mem;
   size_t new_size      = request->new_size;
   size_t current_size  = request->current_size;
 
   if (new_size <= current_size) {
-    printf("Error grow size bad %d:%d\n", new_size, current_size);
+    printf("Error grow size bad %zu:%zu\n", new_size, current_size);
   }
 
 
-  char * new_file_mem = NULL;
-  CUDA_CALL(cudaMallocManaged(&new_file_mem, new_size));
-  memset((new_file_mem + current_size), 0, (new_size - current_size));
-  memcpy(new_file_mem, file_mem, current_size);
-  //CUDA_CALL(cudaFree(file_mem));
-  // TODO find way to reuse/free cuda malloc mem
+  char * new_file_mem = (char *) allocate_from_memory_pool(new_size);
+  assert(new_file_mem != NULL);
+  memcpy(new_file_mem, old_file_mem, current_size);
+  free_from_memory_pool(old_file_mem, current_size);
 
   ret_response->file_data = new_file_mem;
   ret_response->file_size = new_size;
@@ -234,7 +244,7 @@ void handle_gpu_file_close(volatile request_t * request, volatile response_t * r
   /* If the file has been appended to the actual file needs to grow */
   if (actual_size != original_size) {
     if (actual_size < original_size) {
-      printf("Error close size bad %d:%d\n", actual_size, original_size);
+      printf("Error close size bad %zu:%zu\n", actual_size, original_size);
     }
 
     int err = ftruncate(host_fd, actual_size);
