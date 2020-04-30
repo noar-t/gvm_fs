@@ -7,6 +7,10 @@
 #define NUM_BLOCKS 100
 #define FILE_TABLE_FULL -1
 
+/**************************
+ * Memory Pool Structures *
+ **************************/
+
 // TODO might be best to split these back out
 
 /***********************
@@ -44,10 +48,10 @@ typedef file_meta_table_t * global_file_meta_table_t;
 typedef int gpu_fd;
 
 /**************************
- * Ringbuf Datastructures *
+ * RPC Queue Datastructures *
  **************************/
 
-#define RINGBUF_SIZE 100
+#define RPC_QUEUE_SIZE 100
 #define MAX_PATH_SIZE 64
 
 /* Type of fs request */
@@ -94,7 +98,7 @@ typedef struct response_t {
   char * file_data;
 } response_t;
 
-typedef struct ringbuf_t {
+typedef struct rpc_queue_t {
   /* Synchronization Variables */
   gpu_mutex_t * gpu_mutex;
 
@@ -102,8 +106,8 @@ typedef struct ringbuf_t {
   pthread_t request_handler;
 
   /* Request Buffer Data */
-  request_t requests[RINGBUF_SIZE]; /* XXX struct elements will be volatile */
-  volatile response_t responses[RINGBUF_SIZE];
-} ringbuf_t;
+  request_t requests[RPC_QUEUE_SIZE]; /* XXX struct elements will be volatile */
+  volatile response_t responses[RPC_QUEUE_SIZE];
+} rpc_queue_t;
 
 #endif
