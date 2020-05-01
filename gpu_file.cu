@@ -192,23 +192,26 @@ void handle_gpu_file_open(volatile request_t * request, volatile response_t * re
   assert(file_size > 0); 
 
   /* Read data into CPU */ 
-  char * cpu_file_mem = (char *) malloc(file_size);
-  if (cpu_file_mem == NULL) 
-    perror("failure in malloc withink file open\n");
+  //char * cpu_file_mem = (char *) malloc(file_size);
+  //if (cpu_file_mem == NULL) 
+  //  perror("failure in malloc withink file open\n");
 
-  ssize_t bytes_read = read(fd, cpu_file_mem, file_size);
+  /* Memory pool should be unified */
+  char * file_mem = (char *) allocate_from_memory_pool(file_size); 
+  assert(file_mem != NULL);
+  ssize_t bytes_read = read(fd, file_mem, file_size);
   if (bytes_read != file_size)
     perror("handle_gpu_file_open error reading file\n");
 
   fprintf(stderr, "pre cuda malloced %zu\n", file_size);
-  char * gpu_file_mem = (char *) allocate_from_memory_pool(file_size); 
-  assert(gpu_file_mem != NULL);
+  //char * gpu_file_mem = (char *) allocate_from_memory_pool(file_size); 
+  //assert(gpu_file_mem != NULL);
   fprintf(stderr, "cuda malloced\n");
 
   ret_response->host_fd     = fd;
   ret_response->file_size   = file_size;
   ret_response->permissions = permissions;
-  ret_response->file_data   = gpu_file_mem;
+  ret_response->file_data   = file_mem;
 }
 
 __host__
